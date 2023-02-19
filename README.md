@@ -1,5 +1,7 @@
 # README
 
+*Most of the code is shamelessely stolen from the excellent [OpenAI Baselines GitHub repository](https://github.com/openai/baselines).*
+
 1. Go to the poetry [website](https://python-poetry.org) and [install it](https://python-poetry.org/docs/#installation).
 
 2. Run `poetry install` in the project directory. 
