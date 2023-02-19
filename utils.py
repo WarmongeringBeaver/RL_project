@@ -23,7 +23,7 @@ from segment_tree import MinSegmentTree, SumSegmentTree
 
 
 class ReplayBuffer:
-    """A simple numpy replay buffer."""
+    """A simple replay buffer."""
 
     def __init__(
         self,
@@ -39,15 +39,8 @@ class ReplayBuffer:
         self.rews_buf = np.zeros([size], dtype=np.float32)
         self.done_buf = np.zeros(size, dtype=np.float32)
         self.max_size, self.batch_size = size, batch_size
-        (
-            self.ptr,
-            self.size,
-        ) = (
-            0,
-            0,
-        )
-
-        # for N-step Learning
+        self.ptr, self.size = 0, 0
+        # for n-step Learning
         self.n_step_buffer = deque(maxlen=n_step)
         self.n_step = n_step
         self.gamma = gamma
@@ -60,6 +53,7 @@ class ReplayBuffer:
         next_obs: np.ndarray,
         done: bool,
     ) -> Tuple[np.ndarray, np.ndarray, float, np.ndarray, bool]:
+        """Stores a transition into the replay buffer."""
         transition = (obs, act, rew, next_obs, done)
         self.n_step_buffer.append(transition)
 
@@ -82,6 +76,7 @@ class ReplayBuffer:
         return self.n_step_buffer[0]
 
     def sample_batch(self) -> Dict[str, np.ndarray]:
+        """Samples a batch of transitions from the replay buffer."""
         idxs = np.random.choice(self.size, size=self.batch_size, replace=False)
 
         return dict(
@@ -90,12 +85,13 @@ class ReplayBuffer:
             acts=self.acts_buf[idxs],
             rews=self.rews_buf[idxs],
             done=self.done_buf[idxs],
-            # for N-step Learning
+            # for n-step Learning
             indices=idxs,
         )
 
     def sample_batch_from_idxs(self, idxs: np.ndarray) -> Dict[str, np.ndarray]:
-        # for N-step Learning
+        """Samples a batch of transitions from the replay buffer given a set of indexes."""
+        # for n-step Learning
         return dict(
             obs=self.obs_buf[idxs],
             next_obs=self.next_obs_buf[idxs],
@@ -127,12 +123,16 @@ class PrioritizedReplayBuffer(ReplayBuffer):
     """Prioritized Replay buffer.
 
     Attributes:
-        max_priority (float): max priority
-        tree_ptr (int): next index of tree
-        alpha (float): alpha parameter for prioritized replay buffer
-        sum_tree (SumSegmentTree): sum tree for prior
-        min_tree (MinSegmentTree): min tree for min prior to get max weight
-
+    - max_priority: float
+        max priority
+    - tree_ptr: int
+        next index of tree
+    - omega: float
+        omega parameter for prioritized replay buffer
+    - sum_tree: SumSegmentTree
+        sum tree for prior
+    - min_tree: MinSegmentTree
+        min tree for min prior to get max weight
     """
 
     def __init__(
@@ -140,18 +140,17 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         obs_dim: int,
         size: int,
         batch_size: int = 32,
-        alpha: float = 0.6,
+        omega: float = 0.6,
         n_step: int = 1,
         gamma: float = 0.99,
     ):
-        """Initialization."""
-        assert alpha >= 0
+        assert omega >= 0
 
-        super(PrioritizedReplayBuffer, self).__init__(
+        super().__init__(
             obs_dim, size, batch_size, n_step, gamma
         )
         self.max_priority, self.tree_ptr = 1.0, 0
-        self.alpha = alpha
+        self.omega = omega
 
         # capacity must be positive and a power of 2.
         tree_capacity = 1
@@ -173,8 +172,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         transition = super().store(obs, act, rew, next_obs, done)
 
         if transition:
-            self.sum_tree[self.tree_ptr] = self.max_priority**self.alpha
-            self.min_tree[self.tree_ptr] = self.max_priority**self.alpha
+            self.sum_tree[self.tree_ptr] = self.max_priority**self.omega
+            self.min_tree[self.tree_ptr] = self.max_priority**self.omega
             self.tree_ptr = (self.tree_ptr + 1) % self.max_size
 
         return transition
@@ -211,8 +210,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             assert priority > 0
             assert 0 <= idx < len(self)
 
-            self.sum_tree[idx] = priority**self.alpha
-            self.min_tree[idx] = priority**self.alpha
+            self.sum_tree[idx] = priority**self.omega
+            self.min_tree[idx] = priority**self.omega
 
             self.max_priority = max(self.max_priority, priority)
 
@@ -249,14 +248,20 @@ class NoisyLinear(nn.Module):
     """Noisy linear module for NoisyNet.
 
     Attributes:
-        in_features (int): input size of linear module
-        out_features (int): output size of linear module
-        std_init (float): initial std value
-        weight_mu (nn.Parameter): mean value weight parameter
-        weight_sigma (nn.Parameter): std value weight parameter
-        bias_mu (nn.Parameter): mean value bias parameter
-        bias_sigma (nn.Parameter): std value bias parameter
-
+    - in_features: int
+        input size of linear module
+    - out_features: int
+        output size of linear module
+    - std_init: float
+        initial std value
+    - weight_mu: nn.Parameter
+        mean value weight parameter
+    - weight_sigma: nn.Parameter
+        std value weight parameter
+    - bias_mu: nn.Parameter
+        mean value bias parameter
+    - bias_sigma: nn.Parameter
+        std value bias parameter
     """
 
     def __init__(
@@ -265,8 +270,7 @@ class NoisyLinear(nn.Module):
         out_features: int,
         std_init: float = 0.5,
     ):
-        """Initialization."""
-        super(NoisyLinear, self).__init__()
+        super().__init__()
 
         self.in_features = in_features
         self.out_features = out_features
@@ -317,17 +321,21 @@ class NoisyLinear(nn.Module):
 
 
 class Network(nn.Module):
+    """The neural network used by the agent;"""
+
     def __init__(
         self, in_dim: int, out_dim: int, atom_size: int, support: torch.Tensor
     ):
-        """Initialization."""
-        super(Network, self).__init__()
+        super().__init__()
 
         self.support = support
         self.out_dim = out_dim
         self.atom_size = atom_size
 
-        # set common feature layer
+        # set common feature layer;
+        # fully connected layers are used
+        # instead of convolutional ones, for simplicity;
+        # also, only use noisy layers in the last ones
         self.feature_layer = nn.Sequential(
             nn.Linear(in_dim, 128),
             nn.ReLU(),
@@ -359,7 +367,7 @@ class Network(nn.Module):
         q_atoms = value + advantage - advantage.mean(dim=1, keepdim=True)
 
         dist = F.softmax(q_atoms, dim=-1)
-        dist = dist.clamp(min=1e-3)  # for avoiding nans
+        dist = dist.clamp(min=1e-3)  # to avoid NANs
 
         return dist
 
@@ -372,26 +380,41 @@ class Network(nn.Module):
 
 
 class RainbowAgent:
-    """DQN Agent interacting with environment.
+    """Rainbow Agent interacting with environment.
 
     Attribute:
-        env (gym.Env): openAI Gym environment
-        memory (PrioritizedReplayBuffer): replay memory to store transitions
-        batch_size (int): batch size for sampling
-        target_update (int): period for target model's hard update
-        gamma (float): discount factor
-        dqn (Network): model to train and select actions
-        dqn_target (Network): target model to update
-        optimizer (torch.optim): optimizer for training dqn
-        transition (list): transition information including
-                           state, action, reward, next_state, done
-        v_min (float): min value of support
-        v_max (float): max value of support
-        atom_size (int): the unit number of support
-        support (torch.Tensor): support for categorical dqn
-        use_n_step (bool): whether to use n_step memory
-        n_step (int): step number to calculate n-step td error
-        memory_n (ReplayBuffer): n-step replay buffer
+    - env: gym.Env
+        openAI Gym environment
+    - memory: PrioritizedReplayBuffer
+        replay memory to store transitions
+    - batch_size: int
+        batch size for sampling
+    - target_update: int
+        period for target model's hard update
+    - gamma: float
+        discount factor
+    - dqn: Network
+        model to train and select actions
+    - dqn_target: Network
+        target model to update
+    - optimizer: torch.optim
+        optimizer for training dqn
+    - transition: list
+        transition information including state, action, reward, next_state, done
+    - v_min: float
+        min value of support
+    - v_max: float
+        max value of support
+    - atom_size: int
+        the unit number of support
+    - support: torch.Tensor
+        support for categorical dqn
+    - use_n_step: bool
+        whether to use n_step memory
+    - n_step: int
+        step number to calculate n-step td error
+    - memory_n: ReplayBuffer
+        n-step replay buffer
     """
 
     def __init__(
@@ -415,19 +438,32 @@ class RainbowAgent:
         """Initialization.
 
         Args:
-            env (gym.Env): openAI Gym environment
-            memory_size (int): length of memory
-            batch_size (int): batch size for sampling
-            target_update (int): period for target model's hard update
-            lr (float): learning rate
-            gamma (float): discount factor
-            alpha (float): determines how much prioritization is used
-            beta (float): determines how much importance sampling is used
-            prior_eps (float): guarantees every transition can be sampled
-            v_min (float): min value of support
-            v_max (float): max value of support
-            atom_size (int): the unit number of support
-            n_step (int): step number to calculate n-step td error
+        - env: gym.Env
+            openAI Gym environment
+        - memory_size: int
+            length of memory
+        - batch_size: int
+            batch size for sampling
+        - target_update: int
+            period for target model's hard update
+        - lr: float
+            learning rate
+        - gamma: float
+            discount factor
+        - omega: float
+            determines how much prioritization is used
+        - beta: float
+            determines how much importance sampling is used
+        - prior_eps: float
+            guarantees every transition can be sampled
+        - v_min: float
+            min value of support
+        - v_max: float
+            max value of support
+        - atom_size: int
+            the unit number of support
+        - n_step: int
+            step number to calculate n-step td error
         """
         obs_dim = env.observation_space.shape[0]
         action_dim = env.action_space.n
@@ -447,7 +483,7 @@ class RainbowAgent:
         self.beta = beta
         self.prior_eps = prior_eps
         self.memory = PrioritizedReplayBuffer(
-            obs_dim, memory_size, batch_size, alpha=omega
+            obs_dim, memory_size, batch_size, omega=omega
         )
 
         # memory for N-step Learning
