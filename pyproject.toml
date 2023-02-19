@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "rl-project"
+version = "0.1.0"
+description = ""
+authors = ["Thomas Boyer <thomas.boyer@ensta-paris.fr>"]
+readme = "README.md"
+packages = [{include = "rl_project"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pyvirtualdisplay = "3.0"
+pyglet = "1.5.27"
+matplotlib = "^3.7.0"
+torch = "^1.13.1"
+opencv-python = ">=3"
+ipykernel = "^6.21.2"
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.1.0"
+pylint = "^2.16.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
